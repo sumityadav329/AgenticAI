@@ -185,7 +185,7 @@ class VideoSummarizerApp:
                         height=100
                     )
                     
-                    if st.button("🔍 Analyze & Summarizer Video", type="primary"):
+                    if st.button("🔍 Analyze & Summarize Video", type="primary"):
                         if query:
                             with st.spinner("Processing video..."):
                                 analysis = self.process_video(video_file, query)
