@@ -19,10 +19,14 @@ load_dotenv()
 # Configure Gemini API
 api_key = os.getenv('GEMINI_API_KEY')
 if not api_key:
-    logger.error("GEMINI_API_KEY not found in environment variables")
-    st.error("GEMINI_API_KEY not found in environment variables. Please check your .env file.")
-    raise ValueError("GEMINI_API_KEY not found in environment variables")
+    api_key = st.text_input("Enter your Gemini API Key:", type="password")
+    if not api_key:
+        st.error("API key is required to proceed.")
+        st.stop()
 genai.configure(api_key=api_key)
+
+# Maximum chat history length
+MAX_HISTORY_LENGTH = 20
 
 class CodeHelper:
     def __init__(self):
@@ -32,14 +36,23 @@ class CodeHelper:
         self.setup_ui()
 
     def initialize_session_state(self):
+        """Initialize session state for chat history."""
         if "code_helper_chat_history" not in st.session_state:
             st.session_state["code_helper_chat_history"] = []
 
     def setup_ui(self):
+        """Set up the Streamlit UI."""
         st.title("💻 AI Code Explainer & Debugger")
         st.markdown("""
             **Welcome to the AI Code Helper!**  
             Paste your code snippet below, and our advanced AI will help you understand, debug, or optimize it.
+        """)
+        # Inform users about chat history
+        st.info("""
+            **Note:** This is a demo app using the Gemini API.  
+            - Your chat history will last only during this session.  
+            - We do not save your chat history permanently.  
+            - The chat history is limited to the last 20 messages to ensure smooth performance.
         """)
         # Sidebar information
         with st.sidebar:
@@ -52,23 +65,16 @@ class CodeHelper:
             st.info("💻 Best results with clear, concise code snippets")
 
     def get_gemini_response(self, query):
+        """Get streaming response from Gemini API."""
         try:
             return self.chat.send_message(query, stream=True)
-        except ModuleNotFoundError:
-            logger.error(f"Module not found error: {e}")
-            st.error(f"Module not found error: {str(e)}")
-        except ImportError as import_err:
-            logger.error(f"Import error: {import_err}")
-            st.error(f"Import error: {str(import_err)}")
-        except AttributeError as attr_err:
-            logger.error(f"Attribute error: {attr_err}")
-            st.error(f"Attribute error: {str(attr_err)}")
         except Exception as e:
-            logger.error(f"An unexpected error occurred: {e}")
-            st.error(f"An unexpected error occurred: {str(e)}")
-        return None
+            logger.error(f"Error fetching response from Gemini API: {e}")
+            st.error(f"Failed to fetch response: {str(e)}")
+            return None
 
     def handle_code_analysis(self):
+        """Handle user input and code analysis."""
         code_snippet = st.text_area(
             "Paste your code snippet below:",
             height=200,
@@ -81,15 +87,25 @@ class CodeHelper:
             horizontal=True
         )
 
-        if st.button("Analyze Code", type="primary"):
-            if code_snippet.strip():
-                self.process_code(code_snippet, task)
-            else:
-                st.warning("Please paste some code to analyze.")
+        col1, col2 = st.columns([6, 1])
+        with col1:
+            if st.button("Analyze Code", type="primary", use_container_width=True):
+                if code_snippet.strip():
+                    self.process_code(code_snippet, task)
+                else:
+                    st.warning("Please paste some code to analyze.")
+        with col2:
+            if st.button("New Chat", key="new_chat", use_container_width=True):
+                self.initialize_session_state()  # Reset chat history
+                st.success("Started a new chat session. Previous history is retained.")
 
     def process_code(self, code_snippet, task):
+        """Process the code snippet and generate a response."""
         user_task = f"Task: {task}\nCode:\n{code_snippet}"
         st.session_state["code_helper_chat_history"].append(("user", user_task))
+        # Trim history if it exceeds the maximum length
+        if len(st.session_state["code_helper_chat_history"]) > MAX_HISTORY_LENGTH:
+            st.session_state["code_helper_chat_history"] = st.session_state["code_helper_chat_history"][-MAX_HISTORY_LENGTH:]
         
         with st.spinner(f"{task}ing your code..."):
             prompt = self.create_analysis_prompt(task, code_snippet)
@@ -101,6 +117,7 @@ class CodeHelper:
 
     @staticmethod
     def create_analysis_prompt(task, code):
+        """Create a prompt for the Gemini API based on the task."""
         task_prompts = {
             "Explain the Code": "Explain this code in detail, including its purpose, functionality, and key concepts:",
             "Debug the Code": "Analyze this code for potential issues and provide debugging suggestions:",
@@ -109,6 +126,7 @@ class CodeHelper:
         return f"{task_prompts[task]}\n\n{code}"
 
     def display_streaming_response(self, stream):
+        """Display the streaming response from Gemini."""
         response_container = st.empty()
         full_response = ""
         
@@ -119,6 +137,7 @@ class CodeHelper:
         return full_response
 
     def display_chat_history(self):
+        """Display the chat conversation history."""
         st.divider()
         st.subheader("Analysis History")
         
@@ -127,6 +146,7 @@ class CodeHelper:
             message_container.markdown(f"**{'You' if role == 'user' else 'CodeHelper'}:** ```python\n{message}\n```")
 
 def main():
+    """Main application entry point."""
     try:
         helper = CodeHelper()
         helper.handle_code_analysis()

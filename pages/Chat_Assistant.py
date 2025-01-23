@@ -19,16 +19,20 @@ load_dotenv()
 # Configure Gemini API
 api_key = os.getenv('GEMINI_API_KEY')
 if not api_key:
-    logger.error("GEMINI_API_KEY not found in environment variables")
-    st.error("GEMINI_API_KEY not found in environment variables. Please check your .env file.")
-    raise ValueError("GEMINI_API_KEY not found in environment variables")
+    api_key = st.text_input("Enter your Gemini API Key:", type="password")
+    if not api_key:
+        st.error("API key is required to proceed.")
+        st.stop()
 genai.configure(api_key=api_key)
+
+# Maximum chat history length
+MAX_HISTORY_LENGTH = 20
 
 class GeminiChatbot:
     def __init__(self):
         self.initialize_chat()
         self.setup_streamlit()
-        
+
     def initialize_chat(self):
         """Initialize the chat session and state."""
         try:
@@ -48,6 +52,13 @@ class GeminiChatbot:
             Ask any question, and our advanced Gemini model will respond in real-time.  
             Your conversation history is preserved during the session.
         """)
+        # Inform users about chat history
+        st.info("""
+            **Note:** This is a demo chat app using the Gemini API.  
+            - Your chat history will last only during this session.  
+            - We do not save your chat history permanently.  
+            - The chat history is limited to the last 20 messages to ensure smooth performance.
+        """)
         # Sidebar information
         with st.sidebar:
             st.header("How It Works")
@@ -62,25 +73,17 @@ class GeminiChatbot:
         """Get streaming response from Gemini API."""
         try:
             return self.chat.send_message(query, stream=True)
-        except ModuleNotFoundError:
-            logger.error(f"Module not found error: {e}")
-            st.error(f"Module not found error: {str(e)}")
-        except ImportError as import_err:
-            logger.error(f"Import error: {import_err}")
-            st.error(f"Import error: {str(import_err)}")
-        except AttributeError as attr_err:
-            logger.error(f"Attribute error: {attr_err}")
-            st.error(f"Attribute error: {str(attr_err)}")
         except Exception as e:
-            logger.error(f"An unexpected error occurred: {e}")
-            st.error(f"An unexpected error occurred: {str(e)}")
-        return None
+            logger.error(f"Error fetching response from Gemini API: {e}")
+            st.error(f"Failed to fetch response: {str(e)}")
+            return None
 
     def display_chat_history(self):
         """Display the chat conversation history."""
         st.divider()
         st.subheader("Conversation History")
-        
+
+        # Display chat history in order (newest at the bottom)
         for role, message in st.session_state["gemini_chat_history"]:
             message_container = st.chat_message("user" if role == "user" else "assistant")
             message_container.markdown(
@@ -90,35 +93,46 @@ class GeminiChatbot:
     def handle_user_input(self):
         """Handle user input and generate responses."""
         st.divider()
-        user_input = st.text_input(
-            "Type your query below:",
-            key="user_input",
-            placeholder="Ask me anything..."
+
+        # Input field at the bottom
+        user_input = st.chat_input(
+            "Type your query below and press Enter to send:",
+            key="user_input"
         )
-        
-        col1, col2 = st.columns([6, 1])
-        with col1:
-            submit_query = st.button("Ask", key="submit_query", use_container_width=True)
-        with col2:
-            if st.button("Clear", key="clear_chat", use_container_width=True):
-                st.session_state["gemini_chat_history"] = []
-                st.experimental_rerun()
 
-        if submit_query and user_input.strip():
-            st.session_state["gemini_chat_history"].append(("user", user_input))
-            st.chat_message("user").markdown(f"**You:** {user_input}")
+        # If the user presses Enter or clicks a button
+        if user_input and user_input.strip():
+            if len(user_input.strip()) > 1000:
+                st.warning("Query is too long. Please keep it under 1000 characters.")
+            else:
+                # Add user query to chat history
+                st.session_state["gemini_chat_history"].append(("user", user_input))
+                # Trim history if it exceeds the maximum length
+                if len(st.session_state["gemini_chat_history"]) > MAX_HISTORY_LENGTH:
+                    st.session_state["gemini_chat_history"] = st.session_state["gemini_chat_history"][-MAX_HISTORY_LENGTH:]
+                st.chat_message("user").markdown(f"**You:** {user_input}")
 
-            with st.chat_message("assistant"):
-                placeholder = st.empty()
-                response_stream = self.get_gemini_response(user_input)
-                
-                if response_stream:
-                    bot_response = ""
-                    for chunk in response_stream:
-                        bot_response += chunk.text
-                        placeholder.markdown(f"**Gemini:** {bot_response}")
-                    
-                    st.session_state["gemini_chat_history"].append(("bot", bot_response))
+                # Generate and display Gemini response
+                with st.chat_message("assistant"):
+                    placeholder = st.empty()
+                    with st.spinner("Generating response..."):
+                        response_stream = self.get_gemini_response(user_input)
+
+                    if response_stream:
+                        bot_response = ""
+                        try:
+                            for chunk in response_stream:
+                                bot_response += chunk.text
+                                placeholder.markdown(f"**Gemini:** {bot_response}")
+                            st.session_state["gemini_chat_history"].append(("bot", bot_response))
+                        except Exception as e:
+                            logger.error(f"Error processing streaming response: {e}")
+                            st.error("An error occurred while processing the response.")
+
+        # New Chat button
+        if st.button("New Chat", key="new_chat", use_container_width=True):
+            self.initialize_chat()  # Reinitialize the chat session
+            st.success("Started a new chat session. Previous history is retained.")
 
 def main():
     """Main application entry point."""

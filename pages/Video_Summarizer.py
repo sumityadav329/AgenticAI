@@ -162,7 +162,7 @@ class VideoSummarizerApp:
         """Main application loop"""
         try:
             # Main content area
-            col1, col2 = st.columns(2)
+            col1, col2 = st.columns([1, 2])  # Adjust column widths
 
             with col1:
                 st.header("Upload Video")
@@ -185,11 +185,12 @@ class VideoSummarizerApp:
                         height=100
                     )
                     
-                    if st.button("🔍 Analyze Video", type="primary"):
+                    if st.button("🔍 Analyze & Summarizer Video", type="primary"):
                         if query:
                             with st.spinner("Processing video..."):
                                 analysis = self.process_video(video_file, query)
                                 
+                                # Display analysis below the video (full width)
                                 st.markdown("""
                                 <div class="analysis-container">
                                     <div class="analysis-title">📊 Video Analysis</div>
