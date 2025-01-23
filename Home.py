@@ -151,6 +151,7 @@ def main():
     # Footer
     st.markdown("""
     <div class="app-footer">
+        <p>If Agents are working fine and suddenly stops working then it means FREE GEMINI API Limits/day reached so try next dayv</a></p>
         <p>Made with ❤️ by <a href="https://buymeacoffee.com/sumityadav" target="_blank">Sumit Yadav</a></p>
         <p>Acknowledgements: Google, Streamlit, and phidata</p>
         <p>Contact: <a href="mailto:sumityadav329@gmail.com">sumityadav329@gmail.com</a></p>
